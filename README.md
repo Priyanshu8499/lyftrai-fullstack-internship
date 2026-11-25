@@ -4,9 +4,9 @@ A full-stack AI chat application with LiteLLM gateway, response caching, automat
 
 ## 1. Live URLs
 
-- **Frontend**: Pending deployment
-- **Backend**: Pending deployment
-- **Health Check**: Pending deployment
+- **Frontend**: https://lyftrai-chat-frontend.onrender.com
+- **Backend**: https://lyftrai-chat-backend.onrender.com
+- **Health Check**: https://lyftrai-chat-backend.onrender.com/health
 
 ## 2. Run locally: with Docker and without
 
@@ -79,7 +79,7 @@ The schema is created automatically on startup. Using aiosqlite for async compat
 ### Failover with X-Simulate-Failure
 Test key_1 failing over to key_2:
 ```bash
-curl -X POST https://your-backend.render.com/chat \
+curl -X POST https://lyftrai-chat-backend.onrender.com/chat \
   -H "Content-Type: application/json" \
   -H "X-Simulate-Failure: key_1=429" \
   -d '{"session_id": "test-1", "message": "Hello"}'
@@ -88,7 +88,7 @@ curl -X POST https://your-backend.render.com/chat \
 
 Test all keys failing:
 ```bash
-curl -X POST https://your-backend.render.com/chat \
+curl -X POST https://lyftrai-chat-backend.onrender.com/chat \
   -H "Content-Type: application/json" \
   -H "X-Simulate-Failure: *=429" \
   -d '{"session_id": "test-2", "message": "Hello"}'
@@ -102,14 +102,14 @@ Every response includes `input_tokens` and `output_tokens`. These are per-reques
 
 ### Health Check
 ```bash
-curl https://your-backend.render.com/health
+curl https://lyftrai-chat-backend.onrender.com/health
 # {"status": "ok", "keys_configured": 2, "cache_enabled": true}
 ```
 
 ### Session history
 
 ```bash
-curl https://your-backend.render.com/sessions/test-1/messages
+curl https://lyftrai-chat-backend.onrender.com/sessions/test-1/messages
 ```
 
 The endpoint returns user and assistant messages oldest first. Unknown sessions return `404` with a JSON `detail` field.
