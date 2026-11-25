@@ -15,7 +15,7 @@ A full-stack AI chat application with LiteLLM gateway, response caching, automat
 Prerequisites: Docker, Docker Compose, make
 
 1. Clone the repository
-2. Copy `.env.example` to `.env` and fill in your Gemini API keys
+2. Copy `.env.example` to `.env` and configure provider keys. Gemini keys go in `LLM_API_KEYS`; an optional Groq key goes in `GROQ_API_KEY`.
 3. Run:
 ```bash
 make up
@@ -52,7 +52,7 @@ npm run dev
 ## 3. Design decisions: key fallback, caching, SQLite session storage
 
 ### Key Fallback
-The backend maintains a key pool loaded from `LLM_API_KEYS`. Each key gets an ID (`key_1`, `key_2`, ...) based on its position. When a request is made, keys are tried in order. If a key returns a 429 (rate limit), quota error, or 5xx server error, the system automatically tries the next key. The `fallback_attempts` field in the response shows how many keys failed before success.
+The backend keeps each provider key paired with its own model. If `GROQ_API_KEY` is configured, the Groq provider is tried first using `GROQ_MODEL`; Gemini keys from `LLM_API_KEYS` follow using `LLM_MODEL`. A key is never sent to another provider. If a provider returns an invalid-key, 429/quota, or 5xx error, the system tries the next configured credential. `fallback_attempts` reports how many attempts failed before success. Health reports the total configured credential count and requires at least two.
 
 This is implemented manually (not using LiteLLM's Router) to give precise control over which key succeeded and to properly report `key_id` and `fallback_attempts` in the response metadata. The service health check requires at least two configured keys.
 

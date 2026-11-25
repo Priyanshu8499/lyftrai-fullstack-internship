@@ -21,6 +21,7 @@ def use_temp_db(tmp_path, monkeypatch):
     db_file = tmp_path / "test.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
     monkeypatch.setenv("LLM_API_KEYS", "fake_key_1,fake_key_2")
+    monkeypatch.setenv("GROQ_API_KEY", " ")
     monkeypatch.setenv("ENABLE_FAILURE_SIMULATION", "true")
     # Bust settings cache
     from app.config import get_settings
@@ -82,7 +83,7 @@ async def test_health_requires_at_least_two_keys(client, monkeypatch):
     resp = await client.get("/health")
 
     assert resp.status_code == 503
-    assert resp.json()["detail"] == "at least two LLM_API_KEYS are required"
+    assert resp.json()["detail"] == "at least two provider API keys are required"
 
 
 @pytest.mark.asyncio

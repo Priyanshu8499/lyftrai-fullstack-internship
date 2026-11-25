@@ -34,6 +34,8 @@ def is_retryable(exc: Exception) -> bool:
     msg = str(exc).lower()
     retryable_phrases = [
         "429",
+        "401",
+        "403",
         "rate limit",
         "quota",
         "500",
@@ -42,6 +44,11 @@ def is_retryable(exc: Exception) -> bool:
         "service unavailable",
         "internal server error",
         "bad gateway",
+        "api key not valid",
+        "invalid api key",
+        "invalid_api_key",
+        "api_key_invalid",
+        "unauthorized",
     ]
     return any(phrase in msg for phrase in retryable_phrases)
 
@@ -72,21 +79,29 @@ def _parse_simulate_header(header_value: Optional[str]) -> Optional[Dict[str, in
 async def call_with_fallback(
     messages: List[Dict[str, str]],
     simulate_failures: Optional[Dict[str, int]] = None,
-) -> Tuple[Any, Optional[str], int]:
+) -> Tuple[Any, Optional[str], int, str]:
     """
     Call LiteLLM with key-pool fallback.
 
     Returns:
-        (response, key_id, fallback_attempts)
+        (response, key_id, fallback_attempts, model)
         key_id is None on cache hit (detected after first successful call).
     """
     settings = get_settings()
     model = settings.llm_model
-    keys = get_key_pool()
+    # Keep provider credentials paired with their own model/provider. Never
+    # send a provider's key to another provider's endpoint.
+    providers: List[Tuple[str, str, str]] = []
+    if settings.groq_api_key.strip():
+        providers.append(("groq_key_1", settings.groq_model, settings.groq_api_key.strip()))
+    providers.extend(
+        (key_id, settings.llm_model, api_key)
+        for key_id, api_key in get_key_pool()
+    )
 
     # If no keys are configured, try with no key (will likely fail, but lets
     # LiteLLM surface the error naturally).
-    if not keys:
+    if not providers:
         raise AllProvidersUnavailable()
 
     # Determine which keys are globally simulated to fail
@@ -95,7 +110,7 @@ async def call_with_fallback(
     last_error: Optional[Exception] = None
     fallback_attempts = 0
 
-    for key_id, api_key in keys:
+    for key_id, model, api_key in providers:
         # --- Wildcard simulation: all keys fail ---
         if wildcard_fail:
             fallback_attempts += 1
@@ -118,7 +133,7 @@ async def call_with_fallback(
                 api_key=api_key,
                 caching=True,
             )
-            return response, key_id, fallback_attempts
+            return response, key_id, fallback_attempts, model
         except Exception as exc:
             if is_retryable(exc):
                 fallback_attempts += 1

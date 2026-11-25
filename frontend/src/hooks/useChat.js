@@ -38,7 +38,7 @@ export function useChat() {
         if (err.message === 'NETWORK_ERROR') {
           errorText = 'Network error. Please check your connection.'
         } else if (err.message === 'SERVICE_UNAVAILABLE') {
-          errorText = 'All AI providers are currently unavailable. Please try again.'
+          errorText = 'AI providers are unavailable. Check provider credentials or quota, then try again.'
         } else if (err.message === 'VALIDATION_ERROR') {
           errorText = `Invalid request: ${err.detail}`
         } else {

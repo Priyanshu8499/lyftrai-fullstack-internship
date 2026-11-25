@@ -14,7 +14,6 @@ from app.llm import (
     AllProvidersUnavailable,
     call_with_fallback,
     extract_tokens,
-    get_key_pool,
     is_cache_hit,
     parse_simulate_header,
 )
@@ -72,15 +71,15 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     await check_db()
-    keys = get_key_pool()
-    if len(keys) < 2:
+    key_count = get_settings().configured_key_count
+    if key_count < 2:
         raise HTTPException(
             status_code=503,
-            detail="at least two LLM_API_KEYS are required",
+            detail="at least two provider API keys are required",
         )
     return HealthResponse(
         status="ok",
-        keys_configured=len(keys),
+        keys_configured=key_count,
         cache_enabled=True,  # LiteLLM cache is always enabled
     )
 
@@ -113,7 +112,7 @@ async def chat(
     # Call LLM with failover
     start_time = time.monotonic()
     try:
-        response, used_key_id, fallback_attempts = await call_with_fallback(
+        response, used_key_id, fallback_attempts, used_model = await call_with_fallback(
             messages=llm_messages,
             simulate_failures=simulate_failures,
         )
@@ -156,7 +155,7 @@ async def chat(
         reply=reply_text,
         metadata={
             "resolution_source": resolution_source,
-            "model": cfg.llm_model,
+            "model": used_model,
             "latency_ms": latency_ms,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,

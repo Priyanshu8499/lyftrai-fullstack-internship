@@ -14,6 +14,7 @@ def use_temp_db(tmp_path, monkeypatch):
     db_file = tmp_path / "test_failover.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
     monkeypatch.setenv("LLM_API_KEYS", "fake_key_1,fake_key_2")
+    monkeypatch.setenv("GROQ_API_KEY", " ")
     monkeypatch.setenv("ENABLE_FAILURE_SIMULATION", "true")
     from app.config import get_settings
     get_settings.cache_clear()
@@ -77,6 +78,71 @@ async def test_key1_fails_fallback_to_key2(client):
     data = resp.json()
     assert data["metadata"]["key_id"] == "key_2"
     assert data["metadata"]["fallback_attempts"] == 1
+
+
+@pytest.mark.asyncio
+async def test_invalid_gemini_key_falls_back_to_next_key(client):
+    good_resp = _mock_response("fallback after invalid key")
+
+    async def side_effect(**kwargs):
+        if kwargs.get("api_key") == "fake_key_1":
+            raise Exception("API key not valid. Please pass a valid API key.")
+        return good_resp
+
+    with patch("app.llm.litellm.acompletion", side_effect=side_effect):
+        resp = await client.post(
+            "/chat", json={"session_id": "invalid-key-fallback", "message": "hello"}
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["metadata"]["key_id"] == "key_2"
+    assert resp.json()["metadata"]["fallback_attempts"] == 1
+
+
+@pytest.mark.asyncio
+async def test_groq_provider_is_used_and_reported(client, monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "fake_groq_key")
+    monkeypatch.setenv("GROQ_MODEL", "groq/openai/gpt-oss-20b")
+    from app.config import get_settings
+    get_settings.cache_clear()
+    good_resp = _mock_response("Groq response")
+
+    async def side_effect(**kwargs):
+        assert kwargs["api_key"] == "fake_groq_key"
+        assert kwargs["model"] == "groq/openai/gpt-oss-20b"
+        return good_resp
+
+    with patch("app.llm.litellm.acompletion", side_effect=side_effect):
+        resp = await client.post(
+            "/chat", json={"session_id": "groq-provider", "message": "hello"}
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["metadata"]["key_id"] == "groq_key_1"
+    assert resp.json()["metadata"]["model"] == "groq/openai/gpt-oss-20b"
+
+
+@pytest.mark.asyncio
+async def test_groq_auth_failure_falls_back_to_gemini(client, monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "fake_groq_key")
+    from app.config import get_settings
+    get_settings.cache_clear()
+    good_resp = _mock_response("Gemini fallback response")
+
+    async def side_effect(**kwargs):
+        if kwargs.get("api_key") == "fake_groq_key":
+            raise Exception("401 invalid_api_key")
+        return good_resp
+
+    with patch("app.llm.litellm.acompletion", side_effect=side_effect):
+        resp = await client.post(
+            "/chat", json={"session_id": "groq-auth-fallback", "message": "hello"}
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["metadata"]["key_id"] == "key_1"
+    assert resp.json()["metadata"]["model"] == "gemini/gemini-3.8-flash"
+    assert resp.json()["metadata"]["fallback_attempts"] == 1
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 const API_URL = import.meta.env.VITE_API_URL || (
-  import.meta.env.DEV ? 'http://localhost:8000' : 'https://lyftrai-chat-backend.onrender.com'
+  import.meta.env.DEV ? '/api' : 'https://lyftrai-chat-backend.onrender.com'
 )
 
 /**

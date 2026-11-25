@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # LiteLLM model name
     llm_model: str = "gemini/gemini-2.0-flash"
 
+    # Optional Groq provider, kept separate from Gemini credentials
+    groq_api_key: str = ""
+    groq_model: str = "groq/openai/gpt-oss-20b"
+
     @property
     def key_pool(self) -> List[tuple[str, str]]:
         """Return [(key_id, api_key), ...] from LLM_API_KEYS env var."""
@@ -41,6 +45,11 @@ class Settings(BaseSettings):
             return []
         raw_keys = [k.strip() for k in self.llm_api_keys.split(",") if k.strip()]
         return [(f"key_{i + 1}", key) for i, key in enumerate(raw_keys)]
+
+    @property
+    def configured_key_count(self) -> int:
+        """Count configured credentials across providers."""
+        return len(self.key_pool) + int(bool(self.groq_api_key.strip()))
 
     @property
     def db_path(self) -> str:

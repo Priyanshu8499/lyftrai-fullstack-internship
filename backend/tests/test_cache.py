@@ -13,6 +13,7 @@ def use_temp_db(tmp_path, monkeypatch):
     db_file = tmp_path / "test_cache.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
     monkeypatch.setenv("LLM_API_KEYS", "fake_key_1,fake_key_2")
+    monkeypatch.setenv("GROQ_API_KEY", " ")
     monkeypatch.setenv("ENABLE_FAILURE_SIMULATION", "false")
     from app.config import get_settings
     get_settings.cache_clear()
