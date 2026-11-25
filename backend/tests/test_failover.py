@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from app.llm import parse_simulate_header
 
 
 @pytest.fixture(autouse=True)
@@ -43,6 +44,14 @@ def _mock_response(text="ok", input_tokens=5, output_tokens=3, cache_hit=False):
     resp.usage = usage
     resp._hidden_params = {"cache_hit": cache_hit}
     return resp
+
+
+def test_simulation_header_accepts_only_documented_statuses():
+    assert parse_simulate_header("key_1=429,key_2=503") == {
+        "key_1": 429,
+        "key_2": 503,
+    }
+    assert parse_simulate_header("key_1=418") is None
 
 
 # ---------------------------------------------------------------------------

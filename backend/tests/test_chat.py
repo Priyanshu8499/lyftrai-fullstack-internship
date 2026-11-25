@@ -73,6 +73,24 @@ async def test_health_returns_correct_schema(client):
     assert data["cache_enabled"] is True
 
 
+@pytest.mark.asyncio
+async def test_health_requires_at_least_two_keys(client, monkeypatch):
+    monkeypatch.setenv("LLM_API_KEYS", "only_one_key")
+    from app.config import get_settings
+    get_settings.cache_clear()
+
+    resp = await client.get("/health")
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == "at least two LLM_API_KEYS are required"
+
+
+@pytest.mark.asyncio
+async def test_api_docs_are_not_exposed(client):
+    assert (await client.get("/docs")).status_code == 404
+    assert (await client.get("/openapi.json")).status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # POST /chat - validation
 # ---------------------------------------------------------------------------
@@ -81,6 +99,12 @@ async def test_health_returns_correct_schema(client):
 @pytest.mark.asyncio
 async def test_chat_422_empty_message(client):
     resp = await client.post("/chat", json={"session_id": "s1", "message": "   "})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_chat_422_whitespace_session_id(client):
+    resp = await client.post("/chat", json={"session_id": "   ", "message": "hello"})
     assert resp.status_code == 422
 
 

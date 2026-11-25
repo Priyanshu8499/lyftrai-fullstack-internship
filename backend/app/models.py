@@ -19,7 +19,8 @@ class ChatRequest(BaseModel):
     @field_validator("session_id")
     @classmethod
     def validate_session_id(cls, v: str) -> str:
-        if not v or len(v) < 1 or len(v) > 128:
+        v = v.strip()
+        if not v or len(v) > 128:
             raise ValueError("session_id must be between 1 and 128 characters")
         return v
 

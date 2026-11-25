@@ -30,7 +30,13 @@ from app.models import (
 # App setup
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="AI Chat API", version="1.0.0")
+app = FastAPI(
+    title="AI Chat API",
+    version="1.0.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 
 settings = get_settings()
 
@@ -67,6 +73,11 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 async def health() -> HealthResponse:
     await check_db()
     keys = get_key_pool()
+    if len(keys) < 2:
+        raise HTTPException(
+            status_code=503,
+            detail="at least two LLM_API_KEYS are required",
+        )
     return HealthResponse(
         status="ok",
         keys_configured=len(keys),
@@ -118,7 +129,9 @@ async def chat(
     fa_out = 0 if hit else fallback_attempts
 
     # Extract reply text
-    reply_text: str = response.choices[0].message.content
+    reply_text = response.choices[0].message.content
+    if not isinstance(reply_text, str) or not reply_text.strip():
+        raise HTTPException(status_code=503, detail="all providers unavailable")
 
     # Extract token counts
     input_tokens, output_tokens = extract_tokens(response)

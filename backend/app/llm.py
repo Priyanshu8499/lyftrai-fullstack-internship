@@ -21,6 +21,9 @@ class AllProvidersUnavailable(Exception):
     """Raised when every key in the pool has been exhausted."""
 
 
+SIMULATABLE_STATUSES = frozenset({429, 500, 502, 503})
+
+
 def get_key_pool() -> List[Tuple[str, str]]:
     """Return [(key_id, api_key), ...] from settings."""
     return get_settings().key_pool
@@ -58,7 +61,9 @@ def _parse_simulate_header(header_value: Optional[str]) -> Optional[Dict[str, in
         if "=" in part:
             key, _, status = part.partition("=")
             try:
-                result[key.strip()] = int(status.strip())
+                status_code = int(status.strip())
+                if status_code in SIMULATABLE_STATUSES:
+                    result[key.strip()] = status_code
             except ValueError:
                 pass
     return result or None

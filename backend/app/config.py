@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     default_system_prompt: Optional[str] = "You are a helpful assistant."
 
     # LiteLLM model name
-    llm_model: str = "gemini/gemini-3.8-flash"
+    llm_model: str = "gemini/gemini-2.0-flash"
 
     @property
     def key_pool(self) -> List[tuple[str, str]]:

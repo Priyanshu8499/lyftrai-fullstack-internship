@@ -54,7 +54,7 @@ npm run dev
 ### Key Fallback
 The backend maintains a key pool loaded from `LLM_API_KEYS`. Each key gets an ID (`key_1`, `key_2`, ...) based on its position. When a request is made, keys are tried in order. If a key returns a 429 (rate limit), quota error, or 5xx server error, the system automatically tries the next key. The `fallback_attempts` field in the response shows how many keys failed before success.
 
-This is implemented manually (not using LiteLLM's Router) to give precise control over which key succeeded and to properly report `key_id` and `fallback_attempts` in the response metadata.
+This is implemented manually (not using LiteLLM's Router) to give precise control over which key succeeded and to properly report `key_id` and `fallback_attempts` in the response metadata. The service health check requires at least two configured keys.
 
 ### Caching
 LiteLLM's built-in in-memory cache is used. The cache key is derived from the model name + the full message list (system prompt + conversation history + new message). This means:
@@ -73,7 +73,7 @@ The schema is created automatically on startup. Using aiosqlite for async compat
 
 ### Cache Hit
 1. Send a message: "What is the capital of France?"
-2. Send the same message again (new session or same session)
+2. Open a new session and send the same first message again. The cache key includes the full message list, so reusing a session after its history changes is a different request.
 3. The second response shows `resolution_source: LLM_CACHE` and much lower latency
 
 ### Failover with X-Simulate-Failure
@@ -95,6 +95,8 @@ curl -X POST https://your-backend.render.com/chat \
 # Response: 503 {"detail": "all providers unavailable"}
 ```
 
+The supported simulated statuses are `429`, `500`, `502`, and `503`. A failed request is not written to session history.
+
 ### Per-Message Token Usage
 Every response includes `input_tokens` and `output_tokens`. These are per-request values (not cumulative). Two identical first messages in separate sessions will report approximately the same token counts.
 
@@ -103,6 +105,14 @@ Every response includes `input_tokens` and `output_tokens`. These are per-reques
 curl https://your-backend.render.com/health
 # {"status": "ok", "keys_configured": 2, "cache_enabled": true}
 ```
+
+### Session history
+
+```bash
+curl https://your-backend.render.com/sessions/test-1/messages
+```
+
+The endpoint returns user and assistant messages oldest first. Unknown sessions return `404` with a JSON `detail` field.
 
 ## 5. Setup Used: your editor and AI tools
 
@@ -113,7 +123,7 @@ curl https://your-backend.render.com/health
 
 ## 6. Bonus features
 
-- **Failure simulation UI**: The X-Simulate-Failure header can be tested directly from the UI (optional toggle)
+- **Failure simulation hook**: The `X-Simulate-Failure` header can be used from any API client to demonstrate failover without consuming provider quota.
 - **Session persistence display**: Session ID shown in UI so users can share/restore conversations
 - **Cache hit visual indicator**: Cache hits highlighted differently in the UI for clear visual feedback
 - **System prompt override**: Per-session system prompt configuration
