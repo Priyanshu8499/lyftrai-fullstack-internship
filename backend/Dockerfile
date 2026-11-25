@@ -7,5 +7,6 @@ FROM python:3.11-slim
 WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY app/ ./app/
+RUN mkdir -p /data
 ENV PYTHONUNBUFFERED=1
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

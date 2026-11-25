@@ -4,9 +4,9 @@ A full-stack AI chat application with LiteLLM gateway, response caching, automat
 
 ## 1. Live URLs
 
-- **Frontend**: https://your-app.vercel.app (replace with actual URL after deployment)
-- **Backend**: https://your-backend.render.com (replace with actual URL after deployment)
-- **Health Check**: https://your-backend.render.com/health
+- **Frontend**: Pending deployment
+- **Backend**: Pending deployment
+- **Health Check**: Pending deployment
 
 ## 2. Run locally: with Docker and without
 
@@ -65,7 +65,7 @@ LiteLLM's built-in in-memory cache is used. The cache key is derived from the mo
 The cache lives in-memory, so it resets on backend restart. For persistence, a disk cache under `/data/litellm_cache` could be used.
 
 ### SQLite Session Storage
-Session history is stored in SQLite in a `messages` table. Each message records its `session_id`, `role`, `content`, optional `metadata` (JSON), and `created_at` timestamp. The database file is stored at `/data/app.db` in a Docker volume, so history survives container restarts.
+Session history is stored in SQLite in a `messages` table. Each message records its `session_id`, `role`, `content`, optional `metadata` (JSON), and `created_at` timestamp. The database file is stored at `/data/app.db`. Docker Compose mounts a named volume locally so history survives container restarts. The selected Render free service has ephemeral storage, so hosted history resets when the service restarts or redeploys.
 
 The schema is created automatically on startup. Using aiosqlite for async compatibility with FastAPI.
 
