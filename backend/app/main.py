@@ -4,12 +4,12 @@ from __future__ import annotations
 import time
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.database import check_db, get_session_messages, init_db, save_messages, session_exists
+from app.database import check_db, delete_session_messages, get_session_messages, init_db, save_messages, session_exists
 from app.llm import (
     AllProvidersUnavailable,
     call_with_fallback,
@@ -182,3 +182,11 @@ async def get_session(session_id: str) -> SessionMessagesResponse:
             )
         )
     return SessionMessagesResponse(session_id=session_id, messages=items)
+
+
+@app.delete("/sessions/{session_id}", status_code=204)
+async def delete_session(session_id: str) -> Response:
+    deleted = await delete_session_messages(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="session not found")
+    return Response(status_code=204)

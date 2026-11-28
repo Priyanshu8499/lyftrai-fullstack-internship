@@ -80,6 +80,18 @@ async def session_exists(session_id: str) -> bool:
     return row is not None
 
 
+async def delete_session_messages(session_id: str) -> bool:
+    """Delete all stored messages for a session. Return whether it existed."""
+    async with aiosqlite.connect(_db_path()) as db:
+        async with db.execute(
+            "DELETE FROM messages WHERE session_id = ?",
+            (session_id,),
+        ) as cursor:
+            deleted = cursor.rowcount > 0
+        await db.commit()
+    return deleted
+
+
 async def save_messages(
     session_id: str,
     user_content: str,

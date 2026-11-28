@@ -1,6 +1,6 @@
-# AI Chat Application
+# Jimmy — AI Chat
 
-A full-stack AI chat application with LiteLLM gateway, response caching, automatic key failover, and multi-turn conversation support.
+Jimmy is a full-stack AI chat application with a LiteLLM gateway, response caching, automatic key failover, and multi-turn conversation support.
 
 ## 1. Live URLs
 

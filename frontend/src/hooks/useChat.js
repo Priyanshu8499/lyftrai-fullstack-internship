@@ -1,56 +1,75 @@
-import { useState, useCallback } from 'react'
-import { generateSessionId } from '../utils/session'
-import { sendChatMessage } from '../utils/api'
+import { useState, useCallback } from "react";
+import { sendChatMessage } from "../utils/api";
 
-const SESSION_ID = generateSessionId()
+export function useChat(sessionId, initialPrompt = "") {
+  const [messageState, setMessageState] = useState({ sessionId, messages: [] });
+  const messages =
+    messageState.sessionId === sessionId ? messageState.messages : [];
+  const [isLoading, setIsLoading] = useState(false);
+  const [systemPrompt, setSystemPrompt] = useState(initialPrompt);
 
-export function useChat() {
-  const [messages, setMessages] = useState([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [systemPrompt, setSystemPrompt] = useState('')
+  const addMessage = useCallback(
+    (msg) => {
+      setMessageState((state) => ({
+        sessionId,
+        messages: [
+          ...(state.sessionId === sessionId ? state.messages : []),
+          msg,
+        ],
+      }));
+    },
+    [sessionId],
+  );
 
-  const addMessage = useCallback((msg) => {
-    setMessages((prev) => [...prev, msg])
-  }, [])
+  const replaceMessages = useCallback(
+    (items, targetSessionId = sessionId) =>
+      setMessageState({ sessionId: targetSessionId, messages: items }),
+    [sessionId],
+  );
 
   const sendMessage = useCallback(
     async (text) => {
-      if (!text.trim() || isLoading) return
+      if (!text.trim() || isLoading) return;
 
       // Add user message immediately
-      addMessage({ role: 'user', content: text })
-      setIsLoading(true)
+      addMessage({ role: "user", content: text });
+      setIsLoading(true);
 
       try {
         const data = await sendChatMessage({
-          session_id: SESSION_ID,
+          session_id: sessionId,
           message: text.trim(),
           system_prompt: systemPrompt || undefined,
-        })
+        });
 
         addMessage({
-          role: 'assistant',
+          role: "assistant",
           content: data.reply,
           metadata: data.metadata,
-        })
+        });
       } catch (err) {
-        let errorText
-        if (err.message === 'NETWORK_ERROR') {
-          errorText = 'Network error. Please check your connection.'
-        } else if (err.message === 'SERVICE_UNAVAILABLE') {
-          errorText = 'AI providers are unavailable. Check provider credentials or quota, then try again.'
-        } else if (err.message === 'VALIDATION_ERROR') {
-          errorText = `Invalid request: ${err.detail}`
+        let errorText;
+        if (err.message === "NETWORK_ERROR") {
+          errorText = "Network error. Please check your connection.";
+        } else if (err.message === "SERVICE_UNAVAILABLE") {
+          errorText =
+            "AI providers are unavailable. Check provider credentials or quota, then try again.";
+        } else if (err.message === "VALIDATION_ERROR") {
+          errorText = `Invalid request: ${err.detail}`;
+        } else if (err.message.startsWith("HTTP_ERROR_")) {
+          errorText =
+            "Jimmy could not respond right now. Please try again in a moment.";
         } else {
-          errorText = `Error: ${err.message}`
+          errorText =
+            "Something went wrong while sending your message. Please try again.";
         }
-        addMessage({ role: 'system', content: errorText })
+        addMessage({ role: "system", content: errorText });
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
     },
-    [isLoading, systemPrompt, addMessage]
-  )
+    [isLoading, systemPrompt, addMessage, sessionId],
+  );
 
   return {
     messages,
@@ -58,6 +77,6 @@ export function useChat() {
     systemPrompt,
     setSystemPrompt,
     sendMessage,
-    sessionId: SESSION_ID,
-  }
+    replaceMessages,
+  };
 }

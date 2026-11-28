@@ -189,3 +189,22 @@ async def test_session_history_stored_after_chat(client):
     assert msgs[1]["role"] == "assistant"
     assert msgs[1]["content"] == "42 is the answer."
     assert msgs[1]["metadata"]["resolution_source"] == "LIVE_INFERENCE"
+
+
+@pytest.mark.asyncio
+async def test_delete_session_removes_history(client):
+    mock_resp = _mock_litellm_response("A saved reply.")
+    with patch("app.llm.litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp):
+        await client.post("/chat", json={"session_id": "clear-test", "message": "Save this"})
+
+    response = await client.delete("/sessions/clear-test")
+
+    assert response.status_code == 204
+    assert (await client.get("/sessions/clear-test/messages")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_session_404_unknown(client):
+    response = await client.delete("/sessions/no-such-session")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "session not found"
