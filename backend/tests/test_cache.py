@@ -17,6 +17,8 @@ def use_temp_db(tmp_path, monkeypatch):
     monkeypatch.setenv("ENABLE_FAILURE_SIMULATION", "false")
     from app.config import get_settings
     get_settings.cache_clear()
+    from app.main import _request_times
+    _request_times.clear()
 
 
 @pytest_asyncio.fixture
@@ -86,7 +88,7 @@ async def test_same_message_returns_cache_second_time(client):
         # First call — live
         r1 = await client.post(
             "/chat",
-            json={"session_id": "cache-test-a", "message": "What is six times seven?"},
+            json={"session_id": "s-614d5c362b2bb571a4004d26b53ddbd2f53bbfe32076a3bf0fa620e7656a14d4", "message": "What is six times seven?"},
         )
         assert r1.status_code == 200
         assert r1.json()["metadata"]["resolution_source"] == "LIVE_INFERENCE"
@@ -95,7 +97,7 @@ async def test_same_message_returns_cache_second_time(client):
         # Second call — cache hit
         r2 = await client.post(
             "/chat",
-            json={"session_id": "cache-test-b", "message": "What is six times seven?"},
+            json={"session_id": "s-1d43c3bdc26ecead74df1539d3b002edd87c6d15051c621df4e63eeb856ac411", "message": "What is six times seven?"},
         )
         assert r2.status_code == 200
         assert r2.json()["metadata"]["resolution_source"] == "LLM_CACHE"
@@ -117,11 +119,11 @@ async def test_different_message_not_from_cache(client):
     with patch("app.llm.litellm.acompletion", side_effect=side_effect):
         r1 = await client.post(
             "/chat",
-            json={"session_id": "cache-test-c", "message": "first question"},
+            json={"session_id": "s-8e8247d7611e3aa2f0cf42aec7235c73580db9d510f5efba31511cac0587f018", "message": "first question"},
         )
         r2 = await client.post(
             "/chat",
-            json={"session_id": "cache-test-d", "message": "second question"},
+            json={"session_id": "s-e92407fcbde727a5f3b20d1b4f94192347ed6322c59d3b11736db811e33e61b6", "message": "second question"},
         )
 
     assert r1.json()["metadata"]["resolution_source"] == "LIVE_INFERENCE"

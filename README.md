@@ -28,6 +28,8 @@ To stop:
 make down
 ```
 
+**Backend tests:** install `backend/requirements-dev.txt`, then run `python -m pytest -q` from `backend/`.
+
 ### Without Docker
 
 **Backend:**

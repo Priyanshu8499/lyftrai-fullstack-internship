@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index,follow" />
+    <meta name="theme-color" content="#f7f8f6" />
+    <title>Privacy information | Jimmy</title>
+    <style>
+      :root { color-scheme: light dark; font: 16px/1.7 system-ui, sans-serif; }
+      body { max-width: 760px; margin: 0 auto; padding: 48px 22px; color: #29312c; background: #fff; }
+      h1, h2 { line-height: 1.2; letter-spacing: -.025em; }
+      h1 { font-size: clamp(2rem, 7vw, 3rem); }
+      h2 { margin-top: 2em; font-size: 1.25rem; }
+      p, li { color: #505b53; }
+      a { color: #34644e; }
+      .brand { font-weight: 700; letter-spacing: -.04em; }
+      @media (prefers-color-scheme: dark) {
+        body { color: #edf1ee; background: #151917; }
+        p, li { color: #c7d0ca; }
+        a { color: #9dc6ac; }
+      }
+    </style>
+  </head>
+  <body>
+    <p class="brand">Jimmy</p>
+    <h1>Privacy information</h1>
+    <p>This page describes how information is handled when you use Jimmy. The service is currently an anonymous chat interface and does not offer user accounts.</p>
+
+    <h2>Information stored by Jimmy</h2>
+    <p>Your conversation messages and assistant replies are sent to Jimmy’s backend and stored in its SQLite database so conversation history can be reopened. Your browser stores conversation titles and session identifiers, your theme choice, and any custom instructions in local storage. Clearing a conversation in Jimmy removes its messages from the application database and its entry from this browser’s list.</p>
+    <p>Anyone with access to this browser profile may be able to view its locally stored conversation titles and reopen chats. Session identifiers are secret links that grant access to a conversation; do not share them.</p>
+
+    <h2>AI providers</h2>
+    <p>When you send a message, Jimmy sends the prompt and relevant conversation context to the AI provider configured by the service operator to generate a reply. The provider and its data handling terms can vary. Provider retention, abuse monitoring, and whether data may be used to improve services depend on the provider, account, and service tier. Review the applicable provider terms before sharing sensitive or confidential information.</p>
+
+    <h2>Hosting and retention</h2>
+    <p>Jimmy is hosted on Render. The current deployment uses a free service and local SQLite storage without a configured durable disk or backup system. Data may therefore be lost when the service restarts, redeploys, or its instance is replaced. No guaranteed retention period or backup is provided. The hosting provider may process technical request data under its own terms.</p>
+
+    <h2>Data choices</h2>
+    <p>You can clear an individual conversation from the Settings panel. You can also clear Jimmy’s local storage in your browser settings to remove locally stored titles, session identifiers, theme choice, and custom instructions. Clearing browser storage alone does not delete messages already stored by the backend.</p>
+
+    <h2>Contact and legal requests</h2>
+    <p>A service operator contact address and formal process for privacy requests have not been published yet. They must be provided by the operator before this service is offered for public or regulated use. This notice is operational information, not a legal compliance statement.</p>
+    <p>Last updated: November 28, 2026.</p>
+  </body>
+</html>

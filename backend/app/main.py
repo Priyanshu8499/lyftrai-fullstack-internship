@@ -1,15 +1,19 @@
 """FastAPI application entry point."""
 from __future__ import annotations
 
+import asyncio
 import time
+from collections import defaultdict, deque
+from contextlib import asynccontextmanager
+from re import fullmatch
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.database import check_db, delete_session_messages, get_session_messages, init_db, save_messages, session_exists
+from app.database import check_db, delete_session_messages, get_session_message_page, get_session_messages, init_db, save_messages
 from app.llm import (
     AllProvidersUnavailable,
     call_with_fallback,
@@ -29,12 +33,19 @@ from app.models import (
 # App setup
 # ---------------------------------------------------------------------------
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await init_db()
+    yield
+
+
 app = FastAPI(
     title="AI Chat API",
     version="1.0.0",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
+    lifespan=lifespan,
 )
 
 settings = get_settings()
@@ -42,15 +53,56 @@ settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "X-Simulate-Failure"],
 )
 
+_request_times = defaultdict(deque)
+_rate_window_seconds = 60
+_rate_limit = 20
+_max_request_bytes = 16 * 1024
 
-@app.on_event("startup")
-async def startup_event() -> None:
-    await init_db()
+
+def add_security_headers(response: Response) -> Response:
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault("Cache-Control", "no-store")
+    response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
+
+@app.middleware("http")
+async def protect_api(request: Request, call_next):
+    """Add baseline browser protections and bound public chat traffic."""
+    if request.url.path == "/chat" and request.method == "POST":
+        try:
+            if int(request.headers.get("content-length", "0")) > _max_request_bytes:
+                return add_security_headers(JSONResponse(status_code=413, content={"detail": "request too large"}))
+        except ValueError:
+            return add_security_headers(JSONResponse(status_code=400, content={"detail": "invalid content length"}))
+
+        client_ip = request.client.host if request.client else "unknown"
+        now = time.monotonic()
+        attempts = _request_times[client_ip]
+        while attempts and now - attempts[0] >= _rate_window_seconds:
+            attempts.popleft()
+        if len(attempts) >= _rate_limit:
+            return add_security_headers(JSONResponse(
+                status_code=429,
+                headers={"Retry-After": str(_rate_window_seconds)},
+                content={"detail": "too many chat requests; try again shortly"},
+            ))
+        attempts.append(now)
+
+    return add_security_headers(await call_next(request))
+
+
+def validate_session_token(session_id: str) -> None:
+    if not fullmatch(r"s-[0-9a-f]{64}", session_id):
+        raise HTTPException(status_code=404, detail="session not found")
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +149,8 @@ async def chat(
         simulate_failures = parse_simulate_header(x_simulate_failure)
 
     # Build messages list
-    history = await get_session_messages(body.session_id)
+    # Keep model context and database work bounded on long-running chats.
+    history = await get_session_messages(body.session_id, limit=40)
 
     system_prompt = body.system_prompt or cfg.default_system_prompt
     llm_messages = []
@@ -112,12 +165,17 @@ async def chat(
     # Call LLM with failover
     start_time = time.monotonic()
     try:
-        response, used_key_id, fallback_attempts, used_model = await call_with_fallback(
-            messages=llm_messages,
-            simulate_failures=simulate_failures,
+        response, used_key_id, fallback_attempts, used_model = await asyncio.wait_for(
+            call_with_fallback(
+                messages=llm_messages,
+                simulate_failures=simulate_failures,
+            ),
+            timeout=80,
         )
     except AllProvidersUnavailable:
         raise HTTPException(status_code=503, detail="all providers unavailable")
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="the AI request timed out; please try again")
 
     latency_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -166,26 +224,26 @@ async def chat(
 
 
 @app.get("/sessions/{session_id}/messages", response_model=SessionMessagesResponse)
-async def get_session(session_id: str) -> SessionMessagesResponse:
-    exists = await session_exists(session_id)
-    if not exists:
+async def get_session(
+    session_id: str,
+    before_id: Optional[int] = Query(default=None, ge=1),
+    limit: int = Query(default=100, ge=1, le=100),
+) -> SessionMessagesResponse:
+    validate_session_token(session_id)
+    messages, next_before_id = await get_session_message_page(
+        session_id, before_id=before_id, limit=limit
+    )
+    if not messages:
         raise HTTPException(status_code=404, detail="session not found")
-
-    messages = await get_session_messages(session_id)
-    items = []
-    for m in messages:
-        items.append(
-            MessageItem(
-                role=m["role"],
-                content=m["content"],
-                metadata=m.get("metadata"),
-            )
-        )
-    return SessionMessagesResponse(session_id=session_id, messages=items)
+    items = [MessageItem(**m) for m in messages]
+    return SessionMessagesResponse(
+        session_id=session_id, messages=items, next_before_id=next_before_id
+    )
 
 
 @app.delete("/sessions/{session_id}", status_code=204)
 async def delete_session(session_id: str) -> Response:
+    validate_session_token(session_id)
     deleted = await delete_session_messages(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="session not found")

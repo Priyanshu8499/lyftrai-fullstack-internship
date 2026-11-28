@@ -14,7 +14,7 @@ export function useChat(sessionId, initialPrompt = "") {
         sessionId,
         messages: [
           ...(state.sessionId === sessionId ? state.messages : []),
-          msg,
+          { ...msg, localId: msg.localId || crypto.randomUUID() },
         ],
       }));
     },
@@ -56,6 +56,14 @@ export function useChat(sessionId, initialPrompt = "") {
             "AI providers are unavailable. Check provider credentials or quota, then try again.";
         } else if (err.message === "VALIDATION_ERROR") {
           errorText = `Invalid request: ${err.detail}`;
+        } else if (err.message === "RATE_LIMITED") {
+          errorText = "Jimmy is receiving many requests. Please wait a minute and try again.";
+        } else if (err.message === "REQUEST_TOO_LARGE") {
+          errorText = "This message is too large to send. Please shorten it and try again.";
+        } else if (err.message === "INVALID_SESSION") {
+          errorText = "This chat needs a fresh session. Start a new chat and try again.";
+        } else if (err.message === "AI_TIMEOUT") {
+          errorText = "Jimmy took too long to respond. Please try again.";
         } else if (err.message.startsWith("HTTP_ERROR_")) {
           errorText =
             "Jimmy could not respond right now. Please try again in a moment.";

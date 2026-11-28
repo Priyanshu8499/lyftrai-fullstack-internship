@@ -1,3 +1,5 @@
+import { isValidSessionId } from "./session";
+
 const API_URL =
   import.meta.env.VITE_API_URL ||
   (import.meta.env.DEV ? "/api" : "https://lyftrai-chat-backend.onrender.com");
@@ -7,6 +9,7 @@ const API_URL =
  * Returns the parsed JSON response or throws an enriched error.
  */
 export async function sendChatMessage({ session_id, message, system_prompt }) {
+  if (!isValidSessionId(session_id)) throw new Error("INVALID_SESSION");
   let response;
   try {
     response = await fetch(`${API_URL}/chat`, {
@@ -44,6 +47,9 @@ export async function sendChatMessage({ session_id, message, system_prompt }) {
   if (response.status === 503) {
     throw new Error("SERVICE_UNAVAILABLE");
   }
+  if (response.status === 429) throw new Error("RATE_LIMITED");
+  if (response.status === 413) throw new Error("REQUEST_TOO_LARGE");
+  if (response.status === 504) throw new Error("AI_TIMEOUT");
 
   const error = new Error(`HTTP_ERROR_${response.status}`);
   error.status = response.status;
@@ -51,6 +57,7 @@ export async function sendChatMessage({ session_id, message, system_prompt }) {
 }
 
 async function requestSession(sessionId, suffix = "", method = "GET") {
+  if (!isValidSessionId(sessionId)) throw new Error("SESSION_NOT_FOUND");
   let response;
   try {
     response = await fetch(
@@ -65,7 +72,10 @@ async function requestSession(sessionId, suffix = "", method = "GET") {
   throw new Error(`HTTP_ERROR_${response.status}`);
 }
 
-export const getSessionMessages = (sessionId) =>
-  requestSession(sessionId, "/messages");
+export const getSessionMessages = (sessionId, beforeId = null) =>
+  requestSession(
+    sessionId,
+    `/messages${beforeId ? `?before_id=${encodeURIComponent(beforeId)}` : ""}`,
+  );
 export const deleteChatSession = (sessionId) =>
   requestSession(sessionId, "", "DELETE");

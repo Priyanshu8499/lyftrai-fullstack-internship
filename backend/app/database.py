@@ -51,33 +51,64 @@ async def init_db() -> None:
         await db.commit()
 
 
-async def get_session_messages(session_id: str) -> List[Dict[str, Any]]:
-    """Return all messages for a session ordered by creation time."""
+def _message_from_row(row: aiosqlite.Row) -> Dict[str, Any]:
+    item: Dict[str, Any] = {
+        "id": row["id"],
+        "role": row["role"],
+        "content": row["content"],
+    }
+    if row["metadata"]:
+        item["metadata"] = json.loads(row["metadata"])
+    return item
+
+
+async def get_session_messages(
+    session_id: str, limit: Optional[int] = None
+) -> List[Dict[str, Any]]:
+    """Return session messages in chronological order, optionally bounded to the latest rows."""
     async with aiosqlite.connect(_db_path()) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT role, content, metadata FROM messages WHERE session_id = ? ORDER BY id ASC",
-            (session_id,),
-        ) as cursor:
+        if limit is None:
+            cursor = await db.execute(
+                "SELECT id, role, content, metadata FROM messages WHERE session_id = ? ORDER BY id ASC",
+                (session_id,),
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT id, role, content, metadata FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT ?",
+                (session_id, limit),
+            )
+        async with cursor:
             rows = await cursor.fetchall()
-    result = []
-    for row in rows:
-        item: Dict[str, Any] = {"role": row["role"], "content": row["content"]}
-        if row["metadata"]:
-            item["metadata"] = json.loads(row["metadata"])
-        result.append(item)
-    return result
+    if limit is not None:
+        rows.reverse()
+    return [_message_from_row(row) for row in rows]
 
 
-async def session_exists(session_id: str) -> bool:
-    """Return True if the session has at least one message in the DB."""
+async def get_session_message_page(
+    session_id: str, before_id: Optional[int] = None, limit: int = 100
+) -> tuple[List[Dict[str, Any]], Optional[int]]:
+    """Return the latest page before a stable message cursor and the next older cursor."""
     async with aiosqlite.connect(_db_path()) as db:
-        async with db.execute(
-            "SELECT 1 FROM messages WHERE session_id = ? LIMIT 1",
-            (session_id,),
-        ) as cursor:
-            row = await cursor.fetchone()
-    return row is not None
+        db.row_factory = aiosqlite.Row
+        if before_id is None:
+            cursor = await db.execute(
+                "SELECT id, role, content, metadata FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT ?",
+                (session_id, limit + 1),
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT id, role, content, metadata FROM messages WHERE session_id = ? AND id < ? ORDER BY id DESC LIMIT ?",
+                (session_id, before_id, limit + 1),
+            )
+        async with cursor:
+            rows = await cursor.fetchall()
+
+    has_more = len(rows) > limit
+    page = rows[:limit]
+    next_before_id = page[-1]["id"] if has_more else None
+    page.reverse()
+    return [_message_from_row(row) for row in page], next_before_id
 
 
 async def delete_session_messages(session_id: str) -> bool:

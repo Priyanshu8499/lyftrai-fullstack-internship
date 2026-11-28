@@ -1,6 +1,7 @@
 """Pydantic request / response models."""
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, field_validator
@@ -20,8 +21,8 @@ class ChatRequest(BaseModel):
     @classmethod
     def validate_session_id(cls, v: str) -> str:
         v = v.strip()
-        if not v or len(v) > 128:
-            raise ValueError("session_id must be between 1 and 128 characters")
+        if not re.fullmatch(r"s-[0-9a-f]{64}", v):
+            raise ValueError("session_id must be a 256-bit Jimmy session token")
         return v
 
     @field_validator("message")
@@ -33,6 +34,13 @@ class ChatRequest(BaseModel):
         if len(trimmed) > 4000:
             raise ValueError("message must not exceed 4000 characters")
         return trimmed
+
+    @field_validator("system_prompt")
+    @classmethod
+    def validate_system_prompt(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > 2000:
+            raise ValueError("system_prompt must not exceed 2000 characters")
+        return v
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +71,7 @@ class HealthResponse(BaseModel):
 
 
 class MessageItem(BaseModel):
+    id: int
     role: str
     content: str
     metadata: Optional[Dict[str, Any]] = None
@@ -71,3 +80,4 @@ class MessageItem(BaseModel):
 class SessionMessagesResponse(BaseModel):
     session_id: str
     messages: List[MessageItem]
+    next_before_id: Optional[int] = None

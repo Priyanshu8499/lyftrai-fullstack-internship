@@ -18,7 +18,7 @@ import ChatWindow from "./components/ChatWindow";
 import MessageInput from "./components/MessageInput";
 import SystemPrompt from "./components/SystemPrompt";
 import { useChat } from "./hooks/useChat";
-import { generateSessionId } from "./utils/session";
+import { generateSessionId, isValidSessionId } from "./utils/session";
 import { deleteChatSession, getSessionMessages } from "./utils/api";
 import "./App.css";
 
@@ -28,7 +28,15 @@ const PROMPT_KEY = "jimmy.systemPrompt";
 
 function readHistory() {
   try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    if (!Array.isArray(history)) return [];
+    return history.filter(
+      (item) =>
+        item &&
+        typeof item.id === "string" &&
+        typeof item.title === "string" &&
+        Number.isFinite(item.updatedAt),
+    );
   } catch {
     return [];
   }
@@ -62,6 +70,9 @@ export default function App() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearTarget, setClearTarget] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyCursor, setHistoryCursor] = useState(null);
+  const [olderLoading, setOlderLoading] = useState(false);
+  const [olderError, setOlderError] = useState(false);
   const {
     messages,
     isLoading,
@@ -86,9 +97,10 @@ export default function App() {
     const firstUser = messages.find((item) => item.role === "user");
     if (!firstUser) return;
     setHistory((items) => {
+      const existing = items.find((item) => item.id === activeId);
       const updated = {
         id: activeId,
-        title: firstUser.content.slice(0, 54),
+        title: existing?.title || firstUser.content.slice(0, 54),
         updatedAt: Date.now(),
       };
       return [updated, ...items.filter((item) => item.id !== activeId)];
@@ -102,22 +114,32 @@ export default function App() {
       ),
     [history, search],
   );
+  const legacyHistoryCount = history.filter((item) => !isValidSessionId(item.id)).length;
 
   const newChat = useCallback(() => {
-    if (isLoading || historyLoading) return;
+    if (isLoading || historyLoading || olderLoading) return;
     const id = generateSessionId();
     setActiveId(id);
+    setHistoryCursor(null);
+    setOlderError(false);
     replaceMessages([], id);
     setSidebarOpen(false);
-  }, [historyLoading, isLoading, replaceMessages]);
+  }, [historyLoading, isLoading, olderLoading, replaceMessages]);
 
   const openChat = async (id) => {
-    if (id === activeId || historyLoading || isLoading) return;
+    if (id === activeId || historyLoading || isLoading || olderLoading) return;
+    if (!isValidSessionId(id)) {
+      setHistory((items) => items.filter((item) => item.id !== id));
+      return;
+    }
     setHistoryLoading(true);
     setActiveId(id);
+    setHistoryCursor(null);
+    setOlderError(false);
     try {
       const data = await getSessionMessages(id);
       replaceMessages(data.messages || [], id);
+      setHistoryCursor(data.next_before_id || null);
     } catch (error) {
       if (error.message === "SESSION_NOT_FOUND") {
         setHistory((items) => items.filter((item) => item.id !== id));
@@ -134,9 +156,30 @@ export default function App() {
         ],
         id,
       );
+      setHistoryCursor(null);
     } finally {
       setHistoryLoading(false);
       setSidebarOpen(false);
+    }
+  };
+
+  const loadEarlier = async () => {
+    if (!historyCursor || historyLoading || olderLoading || isLoading) return;
+    const requestedSessionId = activeId;
+    setOlderLoading(true);
+    setOlderError(false);
+    try {
+      const data = await getSessionMessages(requestedSessionId, historyCursor);
+      if (requestedSessionId !== activeId) return;
+      replaceMessages(
+        [...(data.messages || []), ...messages],
+        requestedSessionId,
+      );
+      setHistoryCursor(data.next_before_id || null);
+    } catch {
+      setOlderError(true);
+    } finally {
+      setOlderLoading(false);
     }
   };
 
@@ -152,6 +195,7 @@ export default function App() {
   }, [newChat]);
 
   const clearChat = async () => {
+    if (isLoading || historyLoading || olderLoading) return;
     const targetId = clearTarget || activeId;
     setConfirmClear(false);
     setClearTarget(null);
@@ -212,7 +256,7 @@ export default function App() {
         <button
           className="new-chat"
           onClick={newChat}
-          disabled={isLoading || historyLoading}
+          disabled={isLoading || historyLoading || olderLoading}
           title="New chat"
         >
           <span className="new-chat-icon">
@@ -232,6 +276,17 @@ export default function App() {
               <span>Your chats</span>
               <span className="history-count">{history.length}</span>
             </div>
+            {legacyHistoryCount > 0 && (
+              <div className="legacy-history-notice" role="status">
+                <span>{legacyHistoryCount} older chat{legacyHistoryCount === 1 ? "" : "s"} can’t be opened after a security update.</span>
+                <button
+                  type="button"
+                  onClick={() => setHistory((items) => items.filter((item) => isValidSessionId(item.id)))}
+                >
+                  Remove from list
+                </button>
+              </div>
+            )}
             <label className="search-box">
               <Search size={15} />
               <input
@@ -250,7 +305,7 @@ export default function App() {
                   <button
                     className="history-open"
                     onClick={() => openChat(item.id)}
-                    disabled={isLoading || historyLoading}
+                    disabled={isLoading || historyLoading || olderLoading}
                     title={item.title}
                   >
                     <MessageSquarePlus size={15} />
@@ -263,7 +318,7 @@ export default function App() {
                       setClearTarget(item.id);
                       setConfirmClear(true);
                     }}
-                    disabled={isLoading || historyLoading}
+                    disabled={isLoading || historyLoading || olderLoading}
                   >
                     <Trash2 size={14} />
                   </IconButton>
@@ -334,11 +389,15 @@ export default function App() {
           messages={messages}
           isLoading={isLoading || historyLoading}
           onSuggestion={sendMessage}
+          onLoadEarlier={loadEarlier}
+          hasEarlier={Boolean(historyCursor)}
+          loadingEarlier={olderLoading}
+          historyError={olderError}
         />
         <footer className="composer-area">
           <MessageInput
             onSend={sendMessage}
-            isLoading={isLoading || historyLoading}
+            isLoading={isLoading || historyLoading || olderLoading}
           />
           <p className="composer-note">
             Jimmy can make mistakes. Check important information.
@@ -405,6 +464,7 @@ export default function App() {
               </div>
               <button
                 className="danger-button"
+                disabled={isLoading || historyLoading || olderLoading}
                 onClick={() => {
                   setClearTarget(activeId);
                   setConfirmClear(true);
@@ -413,6 +473,9 @@ export default function App() {
                 <Trash2 size={15} /> Clear chat
               </button>
             </div>
+            <a className="privacy-link" href="/privacy.html" target="_blank" rel="noreferrer">
+              Privacy information
+            </a>
           </section>
         </div>
       )}
@@ -442,7 +505,7 @@ export default function App() {
               >
                 Cancel
               </button>
-              <button className="danger-button" onClick={clearChat}>
+              <button className="danger-button" onClick={clearChat} disabled={isLoading || historyLoading || olderLoading}>
                 Clear conversation
               </button>
             </div>

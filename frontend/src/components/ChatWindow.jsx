@@ -31,14 +31,44 @@ const suggestions = [
   },
 ];
 
-export default function ChatWindow({ messages, isLoading, onSuggestion }) {
+export default function ChatWindow({
+  messages,
+  isLoading,
+  onSuggestion,
+  onLoadEarlier,
+  hasEarlier,
+  loadingEarlier,
+  historyError,
+}) {
   const bottomRef = useRef(null);
+  const conversationRef = useRef(null);
+  const lastMessageRef = useRef(messages[messages.length - 1]);
+
+  const loadEarlier = async () => {
+    const panel = conversationRef.current;
+    if (!panel || loadingEarlier) return;
+    const previousHeight = panel.scrollHeight;
+    await onLoadEarlier?.();
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (conversationRef.current) {
+          conversationRef.current.scrollTop +=
+            conversationRef.current.scrollHeight - previousHeight;
+        }
+      }),
+    );
+  };
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage !== lastMessageRef.current || isLoading) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+    lastMessageRef.current = lastMessage;
   }, [messages, isLoading]);
 
   return (
-    <div className="conversation-scroll">
+    <div className="conversation-scroll" ref={conversationRef}>
       {messages.length === 0 && !isLoading && (
         <section className="welcome-screen">
           <div className="welcome-mark">
@@ -73,8 +103,16 @@ export default function ChatWindow({ messages, isLoading, onSuggestion }) {
       )}
       {messages.length > 0 && (
         <div className="message-list">
+          {hasEarlier && (
+            <button className="load-earlier" onClick={loadEarlier} disabled={loadingEarlier}>
+              {loadingEarlier ? "Loading earlier messages…" : historyError ? "Try loading earlier messages again" : "Load earlier messages"}
+            </button>
+          )}
           {messages.map((msg, i) => (
-            <MessageBubble key={`${i}-${msg.role}`} message={msg} />
+              <MessageBubble
+                key={`${msg.id ?? msg.localId ?? i}-${msg.role}`}
+                message={msg}
+              />
           ))}
           {isLoading && (
             <article className="assistant-message">

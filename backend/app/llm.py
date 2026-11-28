@@ -132,6 +132,9 @@ async def call_with_fallback(
                 messages=messages,
                 api_key=api_key,
                 caching=True,
+                timeout=45,
+                num_retries=0,
+                max_tokens=2048,
             )
             return response, key_id, fallback_attempts, model
         except Exception as exc:

@@ -18,6 +18,8 @@ def use_temp_db(tmp_path, monkeypatch):
     monkeypatch.setenv("ENABLE_FAILURE_SIMULATION", "true")
     from app.config import get_settings
     get_settings.cache_clear()
+    from app.main import _request_times
+    _request_times.clear()
 
 
 @pytest_asyncio.fixture
@@ -72,7 +74,7 @@ async def test_key1_fails_fallback_to_key2(client):
     with patch("app.llm.litellm.acompletion", side_effect=side_effect):
         resp = await client.post(
             "/chat",
-            json={"session_id": "fo-test-1", "message": "hello"},
+            json={"session_id": "s-8272cc2d63b4c898178a0ba8248230aba981ce563e57ed12f6368da1373d494b", "message": "hello"},
         )
     assert resp.status_code == 200
     data = resp.json()
@@ -91,7 +93,7 @@ async def test_invalid_gemini_key_falls_back_to_next_key(client):
 
     with patch("app.llm.litellm.acompletion", side_effect=side_effect):
         resp = await client.post(
-            "/chat", json={"session_id": "invalid-key-fallback", "message": "hello"}
+            "/chat", json={"session_id": "s-0fbf9ea7cc5a39ecfc007da1f7e135a23e1f54fa46cabc39cb00581523ab4680", "message": "hello"}
         )
 
     assert resp.status_code == 200
@@ -114,7 +116,7 @@ async def test_groq_provider_is_used_and_reported(client, monkeypatch):
 
     with patch("app.llm.litellm.acompletion", side_effect=side_effect):
         resp = await client.post(
-            "/chat", json={"session_id": "groq-provider", "message": "hello"}
+            "/chat", json={"session_id": "s-cc5c670a8ad53385c6fa66924518672979379999f64b8d192c956b06a91dba23", "message": "hello"}
         )
 
     assert resp.status_code == 200
@@ -136,7 +138,7 @@ async def test_groq_auth_failure_falls_back_to_gemini(client, monkeypatch):
 
     with patch("app.llm.litellm.acompletion", side_effect=side_effect):
         resp = await client.post(
-            "/chat", json={"session_id": "groq-auth-fallback", "message": "hello"}
+            "/chat", json={"session_id": "s-9acdc754bc9561b7f8073b7a7a9bcfbdce37cc3613d310ecdd173ef2445c0cb3", "message": "hello"}
         )
 
     assert resp.status_code == 200
@@ -154,7 +156,7 @@ async def test_groq_auth_failure_falls_back_to_gemini(client, monkeypatch):
 async def test_wildcard_failure_returns_503(client):
     resp = await client.post(
         "/chat",
-        json={"session_id": "fo-test-2", "message": "hello"},
+        json={"session_id": "s-eac34041273d800c5d9626686105880c26b646cb82fa242e46e573f2e8070574", "message": "hello"},
         headers={"X-Simulate-Failure": "*=429"},
     )
     assert resp.status_code == 503
@@ -178,7 +180,7 @@ async def test_fallback_attempts_correct(client):
     with patch("app.llm.litellm.acompletion", side_effect=side_effect):
         resp = await client.post(
             "/chat",
-            json={"session_id": "fo-test-3", "message": "hi"},
+            json={"session_id": "s-87cbe9e45b52862be0e4ead43d1156261b7d1d834b45d8fa301f8fed1ffe9602", "message": "hi"},
         )
     assert resp.status_code == 200
     assert resp.json()["metadata"]["fallback_attempts"] == 1
@@ -196,7 +198,7 @@ async def test_simulate_header_key1_429(client):
     with patch("app.llm.litellm.acompletion", new_callable=AsyncMock, return_value=good_resp):
         resp = await client.post(
             "/chat",
-            json={"session_id": "fo-test-4", "message": "hi"},
+            json={"session_id": "s-20fd17873a5b5714a4f63aec89d0267484f4ca41b951165f8232c7bed87aff30", "message": "hi"},
             headers={"X-Simulate-Failure": "key_1=429"},
         )
     assert resp.status_code == 200
@@ -214,10 +216,10 @@ async def test_simulate_header_key1_429(client):
 async def test_503_does_not_save_history(client):
     resp = await client.post(
         "/chat",
-        json={"session_id": "fo-test-5", "message": "should not be saved"},
+        json={"session_id": "s-b485d00562f2695edc57eb65aa9cb69dec4cb567faa1efeb47b6eea4590231da", "message": "should not be saved"},
         headers={"X-Simulate-Failure": "*=429"},
     )
     assert resp.status_code == 503
     # Session should not exist
-    history_resp = await client.get("/sessions/fo-test-5/messages")
+    history_resp = await client.get("/sessions/s-b485d00562f2695edc57eb65aa9cb69dec4cb567faa1efeb47b6eea4590231da/messages")
     assert history_resp.status_code == 404
