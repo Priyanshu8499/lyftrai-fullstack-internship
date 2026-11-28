@@ -38,6 +38,12 @@ The in-memory throttle is best-effort: it resets on restart and is not shared ac
 - Configure deployment-level security/cache headers for the Render Static Site and verify after deployment. The repository currently has no Render Blueprint, and the frontend is deployed as a dashboard-managed static service.
 - Configure a durable service plan and verify production logs, backups, and alert routing.
 
+The live static site currently serves hashed JavaScript with `Cache-Control: public, max-age=0, s-maxage=300`. Render CDN caching works, but browser cache rules for immutable hashed assets have not been configured. Recommended Render header rules: `/*` set the browser security headers (including CSP with `frame-ancestors 'none'`), `/index.html` set `Cache-Control: no-cache`, and `/assets/*` set `Cache-Control: public, max-age=31536000, immutable`.
+
 ## Performance baseline
 
-Before this review, a mobile Lighthouse run on the live frontend measured: Performance 93, Accessibility 95, Best Practices 100, SEO 100; FCP 1.8 s, LCP 3.0 s, CLS 0, TBT 0 ms. It flagged muted text contrast and about 85 KiB of unused JavaScript on the initial route. A post-change measurement is recorded in the task summary after deployment; Lighthouse scores vary by run and hosting cold starts.
+Before this review, a mobile Lighthouse run on the live frontend measured: Performance 93, Accessibility 95, Best Practices 100, SEO 100; FCP 1.81 s, LCP 3.05 s, CLS 0, TBT 0 ms, and 238,816 bytes transferred. It flagged muted text contrast and about 85 KiB of unused JavaScript on the initial route.
+
+After deployment, a mobile run against the same live URL measured: Performance 99, Accessibility 100, Best Practices 100, SEO 100; FCP 0.87 s, LCP 0.87 s, CLS 0, TBT 147 ms, and 63,823 bytes transferred. Desktop measured 97/100/100/100 with FCP/LCP 0.83 s, CLS 0, TBT 103 ms, and 63,819 bytes transferred. The initial transfer dropped by 73% in these runs. Lighthouse is lab data; field performance can vary with network, cache, and Render cold starts.
+
+One backend health request during an idle wake-up took 48.0 s; a later warm health request took about 1 s. Render's dashboard identifies this service as Free and warns that it can sleep and delay requests by 50 seconds or more.
